@@ -1,6 +1,7 @@
 package com.jacobbevan.raft.tests;
 
 import com.jacobbevan.raft.audit.AuditLogger;
+import com.jacobbevan.raft.audit.SimpleAuditLogger;
 import com.jacobbevan.raft.servers.Planner;
 import com.jacobbevan.raft.servers.RaftServer;
 import com.jacobbevan.raft.servers.Server;
@@ -19,7 +20,7 @@ public class TestRaftServerInteractions {
     @Test
     public void leader_elected_on_reliable_network() {
 
-        var log = mock(AuditLogger.class);
+        var log = new SimpleAuditLogger();
         var planner = mock(Planner.class);
 
         int latency = 100;
