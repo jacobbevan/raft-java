@@ -18,7 +18,7 @@ import static org.mockito.Mockito.mock;
 public class TestRaftServerInteractions {
 
     @Test
-    public void leader_elected_on_reliable_network() {
+    public void leader_elected_on_reliable_network() throws InterruptedException {
 
         var log = new SimpleAuditLogger();
         var planner = mock(Planner.class);
@@ -32,5 +32,13 @@ public class TestRaftServerInteractions {
         for (Server server : servers) {
             server.initialise(proxies);
         }
+
+        //Thread.sleep(30000);
+
+    }
+
+    @Test
+    public void DoNothing() {
+        
     }
 }
