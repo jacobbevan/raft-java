@@ -2,10 +2,7 @@ package com.jacobbevan.raft.tests;
 
 import com.jacobbevan.raft.audit.AuditLogger;
 import com.jacobbevan.raft.audit.SimpleAuditLogger;
-import com.jacobbevan.raft.servers.Planner;
-import com.jacobbevan.raft.servers.RaftServer;
-import com.jacobbevan.raft.servers.Server;
-import com.jacobbevan.raft.servers.ServerProxy;
+import com.jacobbevan.raft.servers.*;
 import org.junit.Test;
 import testProxies.ReliableProxy;
 
@@ -21,7 +18,7 @@ public class TestRaftServerInteractions {
     public void leader_elected_on_reliable_network() throws InterruptedException {
 
         var log = new SimpleAuditLogger();
-        var planner = mock(Planner.class);
+        var planner = new SchedulePlanner(500,400,200,50);
 
         int latency = 100;
         var ids = Arrays.asList("a","b","c","d","e");
@@ -33,12 +30,8 @@ public class TestRaftServerInteractions {
             server.initialise(proxies);
         }
 
-        //Thread.sleep(30000);
+        Thread.sleep(30000);
 
     }
 
-    @Test
-    public void DoNothing() {
-        
-    }
 }

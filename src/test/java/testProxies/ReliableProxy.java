@@ -31,11 +31,11 @@ public class ReliableProxy implements ServerProxy {
 
     @Override
     public CompletableFuture<AppendEntriesResult> AppendEntries(AppendEntriesCommand request) {
-        return CompletableFuture.supplyAsync(()->server.appendEntries(request), CompletableFuture.delayedExecutor(latency, TimeUnit.MILLISECONDS));
+        return CompletableFuture.supplyAsync(()->server.appendEntries(request), CompletableFuture.delayedExecutor(latency, TimeUnit.MILLISECONDS, timerService));
     }
 
     @Override
     public CompletableFuture<RequestVoteResult> RequestVote(RequestVoteCommand request) {
-        return CompletableFuture.supplyAsync(()->server.requestVote(request), CompletableFuture.delayedExecutor(latency, TimeUnit.MILLISECONDS));
+        return CompletableFuture.supplyAsync(()->server.requestVote(request), CompletableFuture.delayedExecutor(latency, TimeUnit.MILLISECONDS, timerService));
     }
 }

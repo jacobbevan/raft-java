@@ -32,7 +32,7 @@ public final class RaftServer implements Server {
     private int currentTerm;
     private String votedFor;
     private int votesReceived = 0;
-    private List<ServerProxy> servers;
+    private List<ServerProxy> servers = new ArrayList<>();
     private SafeAutoCloseable electionTimer;
     private SafeAutoCloseable heartbeatTimer;
 
@@ -50,6 +50,11 @@ public final class RaftServer implements Server {
     }
 
     @Override
+    public int getCurrentTerm() {
+        return currentTerm;
+    }
+
+    @Override
     public RaftServerStateEnum getState() {
         return state;
     }
@@ -57,7 +62,12 @@ public final class RaftServer implements Server {
 
     @Override
     public void initialise(Collection<ServerProxy> servers) {
-        this.servers = new ArrayList<ServerProxy>(servers);
+        //TODO replace with server discover
+        for (ServerProxy server : servers) {
+            if(server.getId()!= id) {
+                this.servers.add((server));
+            }
+        }
     }
 
     @Override
@@ -141,7 +151,7 @@ public final class RaftServer implements Server {
         this.votedFor = this.id;
 
         for(ServerProxy s : this.servers) {
-            s.RequestVote(null).whenCompleteAsync(this::receiveVote);
+            s.RequestVote(new RequestVoteCommand(this.id, this.currentTerm)).whenComplete(this::receiveVote);
         }
     }
 
@@ -164,7 +174,7 @@ public final class RaftServer implements Server {
             this.auditLog.Log(new AuditRecord(AuditRecord.AuditRecordType.SendHeartbeat, this.id, this.state,this.currentTerm ));
 
             for(ServerProxy s : this.servers) {
-                s.AppendEntries(heartBeatCmd).whenCompleteAsync(this::receiveHeartBeatResponse);
+                s.AppendEntries(heartBeatCmd).whenComplete(this::receiveHeartBeatResponse);
             }
 
             this.heartbeatTimer = this.planner.heartbeatDelay(()->sendHeartbeat());

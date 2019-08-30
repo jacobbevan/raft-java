@@ -11,6 +11,7 @@ import java.util.Collections;
 public interface Server {
 
     String getId();
+    int getCurrentTerm();
     RaftServer.RaftServerStateEnum getState();
     AppendEntriesResult appendEntries(AppendEntriesCommand request);
     RequestVoteResult requestVote(RequestVoteCommand request);

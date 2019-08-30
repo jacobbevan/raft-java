@@ -77,4 +77,9 @@ public final class AuditRecord {
     public String getExtraInfo() {
         return extraInfo;
     }
+
+    @Override
+    public String toString() {
+        return "When: " + when + " State: " + state + " Id: " + id + " Type: " + type + " Term: " + term + " ExtraInfo: " + extraInfo;
+    }
 }
