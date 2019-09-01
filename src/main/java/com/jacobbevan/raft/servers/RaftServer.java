@@ -44,24 +44,24 @@ public final class RaftServer implements Server {
     }
 
     @Override
-    public String getId() {
+    public synchronized String getId() {
         //TODO thread safety
         return id;
     }
 
     @Override
-    public int getCurrentTerm() {
+    public synchronized int getCurrentTerm() {
         return currentTerm;
     }
 
     @Override
-    public RaftServerStateEnum getState() {
+    public synchronized RaftServerStateEnum getState() {
         return state;
     }
 
 
     @Override
-    public void initialise(Collection<ServerProxy> servers) {
+    public synchronized void initialise(Collection<ServerProxy> servers) {
         //TODO replace with server discover
         for (ServerProxy server : servers) {
             if(server.getId()!= id) {
@@ -71,7 +71,7 @@ public final class RaftServer implements Server {
     }
 
     @Override
-    public AppendEntriesResult appendEntries(AppendEntriesCommand request) {
+    public synchronized AppendEntriesResult appendEntries(AppendEntriesCommand request) {
 
         this.auditLog.Log(new AuditRecord(AuditRecord.AuditRecordType.RecAppendEntries, this.id, this.state, this.currentTerm));
 
@@ -92,7 +92,7 @@ public final class RaftServer implements Server {
     }
 
     @Override
-    public RequestVoteResult requestVote(RequestVoteCommand request) {
+    public synchronized RequestVoteResult requestVote(RequestVoteCommand request) {
 
         this.auditLog.Log(new AuditRecord(AuditRecord.AuditRecordType.RecVoteRequest, this.id, this.state, this.currentTerm, "Requestor: " + request.getCandidateId()));
 
@@ -111,7 +111,7 @@ public final class RaftServer implements Server {
         }
     }
 
-    public void becomeFollower(int term) {
+    public synchronized void becomeFollower(int term) {
 
         cancelScheduledEvents();
         //TODO thread safety
@@ -129,7 +129,7 @@ public final class RaftServer implements Server {
         this.electionTimer = planner.electionDelay(this::becomeCandidate);
     }
 
-    public void becomeCandidate() {
+    public synchronized void becomeCandidate() {
 
         //TODO Consider State pattern - doing this in more than one place
         if(this.state != RaftServerStateEnum.Candidate) {
@@ -155,14 +155,14 @@ public final class RaftServer implements Server {
         }
     }
 
-    public void becomeLeader() {
+    public synchronized void becomeLeader() {
         cancelScheduledEvents();
         this.state = RaftServerStateEnum.Leader;
         this.auditLog.Log(new AuditRecord(AuditRecord.AuditRecordType.BecomeLeader, this.id, this.state, this.currentTerm));
         sendHeartbeat();
     }
 
-    private void sendHeartbeat() {
+    private synchronized void sendHeartbeat() {
 
         if(this.state == RaftServerStateEnum.Leader) {
 
@@ -181,7 +181,7 @@ public final class RaftServer implements Server {
         }
     }
 
-    private void receiveHeartBeatResponse(AppendEntriesResult result, Throwable throwable) {
+    private synchronized void receiveHeartBeatResponse(AppendEntriesResult result, Throwable throwable) {
         if(result == null) {
             //TODO schedule retry
         }
@@ -190,7 +190,7 @@ public final class RaftServer implements Server {
         }
     }
 
-    private void receiveVote(RequestVoteResult result, Throwable throwable) {
+    private synchronized void receiveVote(RequestVoteResult result, Throwable throwable) {
         if(result == null) {
             //TODO schedule retry
         }

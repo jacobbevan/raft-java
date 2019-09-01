@@ -1,13 +1,12 @@
 package com.jacobbevan.raft.servers;
 
-import java.util.Random;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
 public class SchedulePlanner implements Planner, AutoCloseable {
 
-    private final Random random;
     private final ScheduledExecutorService timerService = Executors.newSingleThreadScheduledExecutor();
 
     private final int electionTimerMeanMs;
@@ -17,7 +16,6 @@ public class SchedulePlanner implements Planner, AutoCloseable {
 
     public SchedulePlanner(int electionTimerMeanMs, int electionTimerRangeMs, int heartBeatIntervalMs, int retryIntervalMs) {
 
-        this.random = new Random();
         this.electionTimerMeanMs = electionTimerMeanMs;
         this.electionTimerRangeMs = electionTimerRangeMs;
         this.heartBeatIntervalMs = heartBeatIntervalMs;
@@ -31,7 +29,7 @@ public class SchedulePlanner implements Planner, AutoCloseable {
 
     @Override
     public SafeAutoCloseable  electionDelay(Runnable callback) {
-        var heartbeatDelay = this.random.nextInt(this.electionTimerRangeMs) + this.electionTimerMeanMs;
+        var heartbeatDelay = ThreadLocalRandom.current().nextInt(this.electionTimerRangeMs) + this.electionTimerMeanMs;
         return delay(heartbeatDelay, callback);
     }
 

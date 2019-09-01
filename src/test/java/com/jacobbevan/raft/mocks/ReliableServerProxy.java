@@ -1,4 +1,4 @@
-package testProxies;
+package com.jacobbevan.raft.mocks;
 
 import com.jacobbevan.raft.messages.AppendEntriesCommand;
 import com.jacobbevan.raft.messages.AppendEntriesResult;
@@ -12,14 +12,14 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-public class ReliableProxy implements ServerProxy {
+public class ReliableServerProxy implements ServerProxy {
 
     private Server server;
     private int latency;
 
     private final ScheduledExecutorService timerService = Executors.newSingleThreadScheduledExecutor();
 
-    public ReliableProxy(Server server, int latency) {
+    public ReliableServerProxy(Server server, int latency) {
         this.server = server;
         this.latency = latency;
     }
