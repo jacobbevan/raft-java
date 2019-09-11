@@ -7,13 +7,12 @@ import com.jacobbevan.raft.messages.RequestVoteResult;
 
 import java.io.IOException;
 import java.util.Collection;
-import java.util.Collections;
 
 public interface Server<C> {
 
     String getId();
     int getCurrentTerm();
-    RaftServer.RaftServerStateEnum getState();
+    RaftServer.RaftServerRole getRole();
     AppendEntriesResult appendEntries(AppendEntriesCommand<C> request);
     RequestVoteResult requestVote(RequestVoteCommand request);
     //TODO consider splitting out into separate interface

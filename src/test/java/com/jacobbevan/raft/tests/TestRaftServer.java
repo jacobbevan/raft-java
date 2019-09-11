@@ -32,7 +32,7 @@ public class TestRaftServer {
     public void server_starts_as_follower() throws InvalidTermTransitionException {
         var server = new RaftServer<>("a", new SumIntState(), planner, log);
         assertThat(server.getId(), is("a"));
-        assertThat(server.getState(), is(RaftServer.RaftServerStateEnum.Follower));
+        assertThat(server.getRole(), is(RaftServer.RaftServerRole.Follower));
     }
 
 
@@ -57,7 +57,7 @@ public class TestRaftServer {
         when(planner.electionDelay(ArgumentMatchers.any())).thenReturn(electionTimer).thenReturn((electionTimer2));
         var server = new RaftServer<>("a", new SumIntState(), planner, log);
         server.appendEntries(new AppendEntriesCommand("a", 2,0));
-        assertThat(server.getState(), is(RaftServer.RaftServerStateEnum.Follower));
+        assertThat(server.getRole(), is(RaftServer.RaftServerRole.Follower));
         assertThat(server.getCurrentTerm(), is(2));
 
         verify(planner,times(2)).electionDelay(ArgumentMatchers.any());
@@ -83,7 +83,7 @@ public class TestRaftServer {
         server.initialise(Arrays.asList(otherServer));
         verify(planner,times(1)).electionDelay(ArgumentMatchers.any());
         server.becomeCandidate();
-        assertThat(server.getState(), is(RaftServer.RaftServerStateEnum.Candidate));
+        assertThat(server.getRole(), is(RaftServer.RaftServerRole.Candidate));
 
     }
 

@@ -2,7 +2,6 @@ package com.jacobbevan.raft.servers;
 
 import com.jacobbevan.raft.audit.AuditLogger;
 import com.jacobbevan.raft.audit.AuditRecord;
-import com.jacobbevan.raft.log.LogEntry;
 import com.jacobbevan.raft.log.RaftLog;
 import com.jacobbevan.raft.log.State;
 import com.jacobbevan.raft.messages.AppendEntriesCommand;
@@ -17,7 +16,7 @@ import java.util.*;
 public final class RaftServer<C> implements Server<C> {
 
 
-    public enum RaftServerStateEnum {
+    public enum RaftServerRole {
         Leader,
         Follower,
         Candidate
@@ -31,8 +30,8 @@ public final class RaftServer<C> implements Server<C> {
     private final AuditLogger auditLog;
     //TODO injection for testing
     private final RaftLog<C> log = new RaftLog<>();
-    private final State<C> state2;
-    private RaftServerStateEnum state;
+    private final State<C> state;
+    private RaftServerRole role;
     private int currentTerm;
     private String votedFor;
     private String leaderId;
@@ -41,11 +40,20 @@ public final class RaftServer<C> implements Server<C> {
     private SafeAutoCloseable electionTimer;
     private SafeAutoCloseable heartbeatTimer;
 
+    public static void guardInvalidTermTransition(int currentTerm, int targetTerm) {
+        if(targetTerm < currentTerm) {
+            String desc = "Requested to become a Follower with term " + targetTerm + " when term is " + currentTerm;
+            InvalidTermTransitionException ex = new InvalidTermTransitionException(desc);
+            logger.error("GuardInvalidTermTransition", ex);
+            throw ex;
+        }
+    }
+
     public RaftServer(String id, State<C> initialState, Planner planner, AuditLogger auditLog) {
         this.id = id;
         this.planner = planner;
         this.auditLog = auditLog;
-        this.state2 = initialState;
+        this.state = initialState;
         becomeFollower(INITIAL_TERM);
     }
 
@@ -61,8 +69,8 @@ public final class RaftServer<C> implements Server<C> {
     }
 
     @Override
-    public synchronized RaftServerStateEnum getState() {
-        return state;
+    public synchronized RaftServerRole getRole() {
+        return role;
     }
 
 
@@ -79,67 +87,68 @@ public final class RaftServer<C> implements Server<C> {
     @Override
     public synchronized AppendEntriesResult appendEntries(AppendEntriesCommand<C> request) {
 
-        auditLog.Log(new AuditRecord(AuditRecord.AuditRecordType.RecAppendEntries, this.id, this.state, this.currentTerm));
+        auditLog(AuditRecord.AuditRecordType.RecAppendEntries);
 
         leaderId = request.getLeaderId();
 
         //this instance considers sender's Term to be stale - reject request and complete.
 
-        if(this.currentTerm > request.getTerm()) {
-            this.auditLog.Log(new AuditRecord(AuditRecord.AuditRecordType.RejectAppendEntries, this.id, this.state, this.currentTerm));
-            return new AppendEntriesResult(false, this.currentTerm);
+        if(currentTerm > request.getTerm()) {
+            auditLog(AuditRecord.AuditRecordType.RejectAppendEntries);
+            return new AppendEntriesResult(false, currentTerm);
         }
 
-        //we should become a follower, irrespective of current state
+        //we should become a follower, irrespective of current role
         becomeFollower(request.getTerm());
 
         boolean success = true;
         //if there is a log entry, try to apply it
         if(request.hasLogEntry()) {
             success = log.tryApplyEntry(request);
-            this.auditLog.Log(new AuditRecord(success ? AuditRecord.AuditRecordType.AcceptLogUpdate : AuditRecord.AuditRecordType.RejectLogUpdate, this.id, this.state, this.currentTerm));
+            auditLog(success ? AuditRecord.AuditRecordType.AcceptLogUpdate : AuditRecord.AuditRecordType.RejectLogUpdate);
         }
 
-        var commits = log.synchroniseCommits(state2, request.getMaxCommit());
+        var commits = log.synchroniseCommits(state, request.getMaxCommit());
         if(commits>0) {
-            this.auditLog.Log(new AuditRecord(AuditRecord.AuditRecordType.SyncroniseLogs, this.id, this.state, this.currentTerm, "CommittedEntries: " + commits));
+            auditLog(AuditRecord.AuditRecordType.SyncroniseLogs, "CommittedEntries: " + commits);
         }
 
-        return new AppendEntriesResult(success, this.currentTerm);
+        return new AppendEntriesResult(success, currentTerm);
     }
 
     @Override
     public synchronized RequestVoteResult requestVote(RequestVoteCommand request) {
 
-        this.auditLog.Log(new AuditRecord(AuditRecord.AuditRecordType.RecVoteRequest, this.id, this.state, this.currentTerm, "Requestor: " + request.getCandidateId()));
+        auditLog(AuditRecord.AuditRecordType.RecVoteRequest, "Requestor: " + request.getCandidateId());
 
         becomeFollowerIfTermIsStale(request.getCurrentTerm());
 
-        if((this.votedFor == request.getCandidateId() || this.votedFor == null) && request.getCurrentTerm() >= this.currentTerm)
+        if((votedFor == request.getCandidateId() || votedFor == null) && request.getCurrentTerm() >= currentTerm)
         {
-            auditLog.Log(new AuditRecord(AuditRecord.AuditRecordType.AcceptVoteRequest, this.id, this.state, this.currentTerm));
-            this.votedFor = request.getCandidateId();
-            return new RequestVoteResult (this.id, true, this.currentTerm);
+            auditLog(AuditRecord.AuditRecordType.AcceptVoteRequest);
+
+            votedFor = request.getCandidateId();
+            return new RequestVoteResult (id, true, currentTerm);
         }
         else
         {
-            auditLog.Log(new AuditRecord(AuditRecord.AuditRecordType.RejectVoteRequest, this.id, this.state, this.currentTerm));
-            return new RequestVoteResult (this.id, false, this.currentTerm);
+            //TODO do we need to differentiate between rejects because we already voted for someone else, versus rejects because the requestors term is stale?
+            auditLog(AuditRecord.AuditRecordType.RejectVoteRequest);
+            return new RequestVoteResult (id, false, currentTerm);
         }
     }
-
 
     @Override
     public synchronized Void execute(C command) throws IOException {
 
         //TODO consider State pattern
-        if(this.state == RaftServerStateEnum.Candidate.Leader) {
+        if(role == RaftServerRole.Candidate.Leader) {
             sendLogUpdate(command);
         }
         else {
             if(leaderId != null) {
                 //TODO async completion...?
-                this.servers.get(leaderId).getProxy().execute(command);
+                servers.get(leaderId).getProxy().execute(command);
             }
             else {
                 throw new IOException("Cannot service request, leader is not known");
@@ -154,52 +163,47 @@ public final class RaftServer<C> implements Server<C> {
         //TODO thread safety
         updateTerm(term);
 
-        if(this.state != RaftServerStateEnum.Follower) {
-            this.state = RaftServerStateEnum.Follower;
-            this.auditLog.Log(new AuditRecord(
-                    AuditRecord.AuditRecordType.BecomeFollower,
-                    this.id,
-                    this.state,
-                    this.currentTerm));
+        if(role != RaftServerRole.Follower) {
+            role = RaftServerRole.Follower;
+            auditLog(AuditRecord.AuditRecordType.BecomeFollower);
         }
 
-        this.electionTimer = planner.electionDelay(this::becomeCandidate);
+        electionTimer = planner.electionDelay(this::becomeCandidate);
     }
 
     public synchronized void becomeCandidate() {
 
         //TODO Consider State pattern - doing this in more than one place
-        if(this.state != RaftServerStateEnum.Candidate) {
-            this.state = RaftServerStateEnum.Candidate;
-            this.auditLog.Log(new AuditRecord(
-                    AuditRecord.AuditRecordType.BecomeCandidate,
-                    this.id,
-                    this.state,
-                    this.currentTerm));
+        if(role != RaftServerRole.Candidate) {
+            role = RaftServerRole.Candidate;
+            auditLog(AuditRecord.AuditRecordType.BecomeCandidate);
         }
 
         resetVotingRecord();
         cancelScheduledEvents();
         leaderId = null;
         currentTerm++;
-        auditLog.Log(new AuditRecord(AuditRecord.AuditRecordType.StartElection, this.id, this.state, this.currentTerm));
+        auditLog(AuditRecord.AuditRecordType.StartElection);
 
-        receiveVote(new RequestVoteResult(this.id,true,this.currentTerm), null);
+        receiveVote(new RequestVoteResult(id,true, currentTerm), null);
 
-        this.votedFor = this.id;
+        votedFor = id;
 
-        for(Peer<C> s : this.servers.values()) {
-            s.getProxy().requestVote(new RequestVoteCommand(this.id, this.currentTerm)).whenComplete(this::receiveVote);
+        for(Peer<C> s : servers.values()) {
+            s.getProxy().requestVote(new RequestVoteCommand(id, currentTerm)).whenComplete(this::receiveVote);
         }
     }
 
     public synchronized void becomeLeader() {
+
         cancelScheduledEvents();
-        state = RaftServerStateEnum.Leader;
-        auditLog.Log(new AuditRecord(AuditRecord.AuditRecordType.BecomeLeader, this.id, this.state, this.currentTerm));
-        for(var peer : this.servers.values()) {
+        role = RaftServerRole.Leader;
+        auditLog(AuditRecord.AuditRecordType.BecomeLeader);
+
+        for(var peer : servers.values()) {
             peer.setNextIndex(log.getNextIndex());
         }
+
         sendHeartbeat();
     }
 
@@ -208,14 +212,13 @@ public final class RaftServer<C> implements Server<C> {
         //TODO retry
         var appendCmd = log.addEntry(id, currentTerm, command);
 
-        this.auditLog.Log(new AuditRecord(AuditRecord.AuditRecordType.SendLogUpdate, this.id, this.state,this.currentTerm));
+        auditLog(AuditRecord.AuditRecordType.SendLogUpdate);
 
-        for(Peer<C> s : this.servers.values()) {
+        for(Peer<C> s : servers.values()) {
             s.getProxy().appendEntries(appendCmd).whenComplete(this::receiveHeartBeatResponse);
         }
 
     }
-
 
     private synchronized  void receiveAppendEntriesResponse(AppendEntriesResult result, Throwable throwable) {
         if(result == null) {
@@ -228,7 +231,7 @@ public final class RaftServer<C> implements Server<C> {
 
     private synchronized void sendHeartbeat() {
 
-        if(this.state == RaftServerStateEnum.Leader) {
+        if(role == RaftServerRole.Leader) {
 
             var heartBeatCmd = new AppendEntriesCommand<C>(
                 id,
@@ -236,16 +239,15 @@ public final class RaftServer<C> implements Server<C> {
                 log.getCommitedIndex()
             );
 
-            this.auditLog.Log(new AuditRecord(AuditRecord.AuditRecordType.SendHeartbeat, this.id, this.state,this.currentTerm ));
+            auditLog(AuditRecord.AuditRecordType.SendHeartbeat);
 
-            for(Peer<C> s : this.servers.values()) {
+            for(Peer<C> s : servers.values()) {
                 s.getProxy().appendEntries(heartBeatCmd).whenComplete(this::receiveHeartBeatResponse);
             }
 
-            this.heartbeatTimer = this.planner.heartbeatDelay(()->sendHeartbeat());
+            heartbeatTimer = planner.heartbeatDelay(()->sendHeartbeat());
         }
     }
-
 
     private synchronized void receiveHeartBeatResponse(AppendEntriesResult result, Throwable throwable) {
         if(result == null) {
@@ -257,16 +259,17 @@ public final class RaftServer<C> implements Server<C> {
     }
 
     private synchronized void receiveVote(RequestVoteResult result, Throwable throwable) {
+
         if(result == null) {
             //TODO schedule retry
         }
         else {
             if(!becomeFollowerIfTermIsStale(result.getTerm())) {
-                if(this.state == RaftServerStateEnum.Candidate && result.isVoteGranted() && this.currentTerm == result.getTerm()) {
+                if(role == RaftServerRole.Candidate && result.isVoteGranted() && currentTerm == result.getTerm()) {
 
-                    this.votesReceived++;
-                    this.auditLog.Log(new AuditRecord(AuditRecord.AuditRecordType.RecVote, this.id, this.state, this.currentTerm, "Voter: " + result.getVoterId()));
-                    if(this.votesReceived > (this.servers.size() + 1) / 2) {
+                    votesReceived++;
+                    auditLog(AuditRecord.AuditRecordType.RecVote, "Voter: " + result.getVoterId());
+                    if(votesReceived > (servers.size() + 1) / 2) {
                         becomeLeader();
                     }
                 }
@@ -285,14 +288,9 @@ public final class RaftServer<C> implements Server<C> {
 
     private boolean staleTermCheck(int termToCompare)
     {
-        if(termToCompare > this.currentTerm)
+        if(termToCompare > currentTerm)
         {
-            this.auditLog.Log(new AuditRecord(
-                    AuditRecord.AuditRecordType.DetectStaleTerm,
-                    this.id,
-                    this.state,
-                    this.currentTerm));
-
+            auditLog(AuditRecord.AuditRecordType.DetectStaleTerm);
             return true;
         }
         return false;
@@ -314,25 +312,24 @@ public final class RaftServer<C> implements Server<C> {
     }
 
     private void cancelScheduledEvents() {
-        if(this.electionTimer != null) {
-            this.electionTimer.close();
-            this.electionTimer = null;
+        if(electionTimer != null) {
+            electionTimer.close();
+            electionTimer = null;
         }
 
-        if(this.heartbeatTimer != null) {
-            this.heartbeatTimer.close();
-            this.heartbeatTimer = null;
-        }
-    }
-
-    public static void guardInvalidTermTransition(int currentTerm, int targetTerm) {
-        if(targetTerm < currentTerm) {
-            String desc = "Requested to become a Follower with term " + targetTerm + " when term is " + currentTerm;
-            InvalidTermTransitionException ex = new InvalidTermTransitionException(desc);
-            logger.error("GuardInvalidTermTransition", ex);
-            throw ex;
+        if(heartbeatTimer != null) {
+            heartbeatTimer.close();
+            heartbeatTimer = null;
         }
     }
 
+
+    private void auditLog(AuditRecord.AuditRecordType type, String extraInfo) {
+        auditLog.Log(new AuditRecord(type, id, role, currentTerm, extraInfo));
+    }
+
+    private void auditLog(AuditRecord.AuditRecordType type) {
+        auditLog.Log(new AuditRecord(type, id, role, currentTerm));
+    }
 
 }
