@@ -12,7 +12,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-public class ReliableServerProxy implements ServerProxy {
+public class ReliableServerProxy<C> implements ServerProxy<C> {
 
     private Server server;
     private int latency;
@@ -30,12 +30,24 @@ public class ReliableServerProxy implements ServerProxy {
     }
 
     @Override
-    public CompletableFuture<AppendEntriesResult> AppendEntries(AppendEntriesCommand request) {
+    public CompletableFuture<AppendEntriesResult> appendEntries(AppendEntriesCommand<C> request) {
         return CompletableFuture.supplyAsync(()->server.appendEntries(request), CompletableFuture.delayedExecutor(latency, TimeUnit.MILLISECONDS, timerService));
     }
 
     @Override
-    public CompletableFuture<RequestVoteResult> RequestVote(RequestVoteCommand request) {
+    public CompletableFuture<RequestVoteResult> requestVote(RequestVoteCommand request) {
         return CompletableFuture.supplyAsync(()->server.requestVote(request), CompletableFuture.delayedExecutor(latency, TimeUnit.MILLISECONDS, timerService));
+    }
+
+    @Override
+    public CompletableFuture<Void> execute(C command) {
+        return CompletableFuture.supplyAsync(()-> {
+            try {
+                return server.execute(command);
+            }
+            catch (Exception ex) {
+                throw new RuntimeException(ex);
+           }
+        }, CompletableFuture.delayedExecutor(latency, TimeUnit.MILLISECONDS, timerService));
     }
 }

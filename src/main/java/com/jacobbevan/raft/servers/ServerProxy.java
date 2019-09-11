@@ -7,8 +7,9 @@ import com.jacobbevan.raft.messages.RequestVoteResult;
 
 import java.util.concurrent.CompletableFuture;
 
-public interface ServerProxy {
+public interface ServerProxy<C> {
     String getId();
-    CompletableFuture<AppendEntriesResult> AppendEntries(AppendEntriesCommand request);
-    CompletableFuture<RequestVoteResult> RequestVote(RequestVoteCommand request);
+    CompletableFuture<AppendEntriesResult> appendEntries(AppendEntriesCommand<C> request);
+    CompletableFuture<RequestVoteResult> requestVote(RequestVoteCommand request);
+    CompletableFuture<Void> execute(C command);
 }

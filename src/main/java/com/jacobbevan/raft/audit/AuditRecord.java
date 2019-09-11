@@ -12,6 +12,7 @@ public final class AuditRecord {
         BecomeFollower,
         BecomeLeader,
         SendHeartbeat,
+        SendLogUpdate,
         RecAppendEntries,
         StartElection,
         RecVote,
@@ -19,8 +20,11 @@ public final class AuditRecord {
         AcceptVoteRequest,
         RejectVoteRequest,
         RecHeartbeatResponse,
+        AcceptLogUpdate,
+        RejectLogUpdate,
         RejectAppendEntries,
         RecVoteRequest,
+        SyncroniseLogs,
         RecVoteRPCFailure,
         AppendEntriesRPCFailure
     }

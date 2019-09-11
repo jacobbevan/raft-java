@@ -2,14 +2,13 @@ package com.jacobbevan.raft.tests;
 
 import com.jacobbevan.raft.messages.AppendEntriesCommand;
 import com.jacobbevan.raft.messages.RequestVoteCommand;
-import com.jacobbevan.raft.messages.RequestVoteResult;
+import com.jacobbevan.raft.mocks.SumIntState;
 import com.jacobbevan.raft.servers.*;
 import com.jacobbevan.raft.audit.AuditLogger;
 import static org.junit.Assert.*;
 import static org.hamcrest.CoreMatchers.*;
 import org.junit.Before;
 import org.junit.Test;
-import org.mockito.ArgumentMatcher;
 import org.mockito.ArgumentMatchers;
 
 import java.util.Arrays;
@@ -31,7 +30,7 @@ public class TestRaftServer {
 
     @Test
     public void server_starts_as_follower() throws InvalidTermTransitionException {
-        var server = new RaftServer("a", planner, log);
+        var server = new RaftServer<>("a", new SumIntState(), planner, log);
         assertThat(server.getId(), is("a"));
         assertThat(server.getState(), is(RaftServer.RaftServerStateEnum.Follower));
     }
@@ -42,7 +41,7 @@ public class TestRaftServer {
 
         var electionTimer = mock(SafeAutoCloseable.class);
         when(planner.electionDelay(ArgumentMatchers.any())).thenReturn(electionTimer);
-        var server = new RaftServer("a", planner, log);
+        var server = new RaftServer<>("a", new SumIntState(), planner, log);
 
         verify(planner).electionDelay(ArgumentMatchers.any());
         verify(electionTimer, never()).close();
@@ -56,8 +55,8 @@ public class TestRaftServer {
         var electionTimer2 = mock(SafeAutoCloseable.class);
 
         when(planner.electionDelay(ArgumentMatchers.any())).thenReturn(electionTimer).thenReturn((electionTimer2));
-        var server = new RaftServer("a", planner, log);
-        server.appendEntries(new AppendEntriesCommand("a", 2));
+        var server = new RaftServer<>("a", new SumIntState(), planner, log);
+        server.appendEntries(new AppendEntriesCommand("a", 2,0));
         assertThat(server.getState(), is(RaftServer.RaftServerStateEnum.Follower));
         assertThat(server.getCurrentTerm(), is(2));
 
@@ -78,9 +77,9 @@ public class TestRaftServer {
         var cf = mock(CompletableFuture.class);
 
         when(planner.electionDelay(ArgumentMatchers.any())).thenReturn(electionTimer).thenReturn((electionTimer2));
-        when(otherServer.RequestVote(ArgumentMatchers.eq(voteRequest))).thenReturn(cf);
+        when(otherServer.requestVote(ArgumentMatchers.eq(voteRequest))).thenReturn(cf);
 
-        var server = new RaftServer("a", planner, log);
+        var server = new RaftServer<>("a", new SumIntState(), planner, log);
         server.initialise(Arrays.asList(otherServer));
         verify(planner,times(1)).electionDelay(ArgumentMatchers.any());
         server.becomeCandidate();
@@ -91,7 +90,7 @@ public class TestRaftServer {
     @Test(expected = InvalidTermTransitionException.class)
     public void reducing_term_results_in_exception() throws InvalidTermTransitionException {
 
-        RaftServer server = new RaftServer("a", planner,log);
+        RaftServer server = new RaftServer<>("a", new SumIntState(), planner,log);
         server.becomeFollower(1);
         server.becomeFollower(0);
     }
