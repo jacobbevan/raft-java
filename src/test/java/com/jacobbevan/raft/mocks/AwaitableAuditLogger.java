@@ -19,11 +19,7 @@ public interface AwaitableAuditLogger extends AuditLogger {
     static AwaitableAuditLogger oneLeaderAllOthersFollow(AuditLogger toDecorate) {
 
 
-        BiFunction<Map<String, RaftServer.RaftServerRole>, AuditRecord, Map<String, RaftServer.RaftServerRole>> agg = (s, r) -> {
-
-            s.put(r.getId(), r.getRole());
-            return s;
-        };
+        var agg = maintainDictionaryOfRolesByServer();
 
         Predicate<Map<String,RaftServer.RaftServerRole>> p = m-> {
 
@@ -36,6 +32,14 @@ public interface AwaitableAuditLogger extends AuditLogger {
         };
 
         return new MonitoringAuditLogger<>(toDecorate, agg, p, new HashMap<>());
+    }
+
+    static BiFunction<Map<String, RaftServer.RaftServerRole>, AuditRecord, Map<String, RaftServer.RaftServerRole>> maintainDictionaryOfRolesByServer() {
+        return (s, r) -> {
+
+                s.put(r.getId(), r.getRole());
+                return s;
+            };
     }
 
 }

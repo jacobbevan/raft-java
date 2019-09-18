@@ -43,6 +43,7 @@ public class TestRaftLog {
         var log = new RaftLog<Integer>("a");
         var cmd = log.addEntry(0, 99);
         assertThat(cmd.getLeaderId(), equalTo("a"));
+        assertThat(cmd.getMaxCommit(), equalTo(log.getCommittedIndex()));
     }
 
     @Test

@@ -14,6 +14,7 @@ public class AppendEntriesCommand<C> {
     public AppendEntriesCommand(String leaderId, int term, int maxCommit) {
         this.term = term;
         this.leaderId = leaderId;
+        this.maxCommit = maxCommit;
     }
 
     public AppendEntriesCommand(String leaderId, int term, int maxCommit, LogEntry<C> logEntry,int prevLogIndex, int prevLogTerm) {
@@ -21,6 +22,7 @@ public class AppendEntriesCommand<C> {
         this.logEntry = logEntry;
         this.prevLogIndex = prevLogIndex;
         this.prevLogTerm = prevLogTerm;
+        this.maxCommit = maxCommit;
     }
 
     public boolean hasLogEntry() {

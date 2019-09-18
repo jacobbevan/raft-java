@@ -8,6 +8,7 @@ public class AppendEntriesResult {
     public AppendEntriesResult(boolean success, int term) {
         this.success = success;
         this.term = term;
+
     }
 
     public boolean isSuccess() {
