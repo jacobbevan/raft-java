@@ -52,4 +52,11 @@ public class AppendEntriesCommand<C> {
         return prevLogTerm;
     }
 
+    public boolean hasPrevLogIndex() {
+        return prevLogIndex != -1;
+    }
+
+    public boolean hasPrevLogTerm() {
+        return prevLogTerm != -1;
+    }
 }

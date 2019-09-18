@@ -10,8 +10,11 @@ import com.jacobbevan.raft.messages.RequestVoteCommand;
 import com.jacobbevan.raft.messages.RequestVoteResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
 import java.io.IOException;
-import java.util.*;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
 
 public final class RaftServer<C> implements Server<C> {
 
@@ -23,13 +26,13 @@ public final class RaftServer<C> implements Server<C> {
     }
 
     private static Logger logger = LoggerFactory.getLogger(RaftServer.class);
+    private static final int INITIAL_TERM = 0;
 
-    private final static int INITIAL_TERM = 0;
     private final String id;
     private final Planner planner;
     private final AuditLogger auditLog;
     //TODO injection for testing
-    private final RaftLog<C> log = new RaftLog<>();
+    private final RaftLog<C> log;
     private final State<C> state;
     private RaftServerRole role;
     private int currentTerm;
@@ -40,17 +43,18 @@ public final class RaftServer<C> implements Server<C> {
     private SafeAutoCloseable electionTimer;
     private SafeAutoCloseable heartbeatTimer;
 
-    public static void guardInvalidTermTransition(int currentTerm, int targetTerm) {
+    private static void guardInvalidTermTransition(int currentTerm, int targetTerm) {
         if(targetTerm < currentTerm) {
             String desc = "Requested to become a Follower with term " + targetTerm + " when term is " + currentTerm;
-            InvalidTermTransitionException ex = new InvalidTermTransitionException(desc);
+            var ex = new InvalidTermTransitionException(desc);
             logger.error("GuardInvalidTermTransition", ex);
             throw ex;
         }
     }
 
-    public RaftServer(String id, State<C> initialState, Planner planner, AuditLogger auditLog) {
+    public RaftServer(final String id, final State<C> initialState, Planner planner, AuditLogger auditLog) {
         this.id = id;
+        this.log = new RaftLog<>(id);
         this.planner = planner;
         this.auditLog = auditLog;
         this.state = initialState;
@@ -210,7 +214,7 @@ public final class RaftServer<C> implements Server<C> {
     private synchronized  void sendLogUpdate(C command) {
 
         //TODO retry
-        var appendCmd = log.addEntry(id, currentTerm, command);
+        var appendCmd = log.addEntry(currentTerm, command);
 
         auditLog(AuditRecord.AuditRecordType.SendLogUpdate);
 
@@ -236,7 +240,7 @@ public final class RaftServer<C> implements Server<C> {
             var heartBeatCmd = new AppendEntriesCommand<C>(
                 id,
                 currentTerm,
-                log.getCommitedIndex()
+                log.getCommittedIndex()
             );
 
             auditLog(AuditRecord.AuditRecordType.SendHeartbeat);

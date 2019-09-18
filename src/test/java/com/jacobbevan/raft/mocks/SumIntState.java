@@ -11,4 +11,8 @@ public class SumIntState implements State<Integer> {
 
         total = total + (int) command;
     }
+
+    public int getTotal() {
+        return total;
+    }
 }
