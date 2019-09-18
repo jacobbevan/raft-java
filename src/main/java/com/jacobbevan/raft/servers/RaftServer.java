@@ -43,7 +43,7 @@ public final class RaftServer<C> implements Server<C> {
     private SafeAutoCloseable electionTimer;
     private SafeAutoCloseable heartbeatTimer;
 
-    private Object lock = new Object();
+    private final Object lock = new Object();
 
     private static void guardInvalidTermTransition(int currentTerm, int targetTerm) {
         if(targetTerm < currentTerm) {
